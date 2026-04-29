@@ -22,20 +22,9 @@ function logToBuffer(msg: string) {
     const timestamp = new Date().toISOString().slice(11, 19);
     logBuffer.push(`[${timestamp}] ${msg}`);
     if (logBuffer.length > MAX_LOG_LINES) logBuffer.shift();
-    console.log(msg);
+    // Use original console.log to avoid recursion
+    process.stdout.write(`[${timestamp}] ${msg}\n`);
 }
-
-// Override console.log to capture sync logs
-const originalLog = console.log;
-const originalError = console.error;
-console.log = (...args: any[]) => {
-    const msg = args.map(a => typeof a === 'object' ? JSON.stringify(a) : String(a)).join(' ');
-    logToBuffer(msg);
-};
-console.error = (...args: any[]) => {
-    const msg = args.map(a => typeof a === 'object' ? JSON.stringify(a) : String(a)).join(' ');
-    logToBuffer(msg);
-};
 
 // Initialize CSA
 setTimeout(() => {
