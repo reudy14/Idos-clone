@@ -28,6 +28,21 @@
         </div>
 
         <div id="results" class="results-container"></div>
+
+        <div class="admin-panel">
+            <div class="admin-header">
+                <h2>Admin</h2>
+                <button id="syncBtn">Sync GTFS Data</button>
+                <span id="syncStatus" class="sync-status"></span>
+            </div>
+            <div id="logPanel" class="log-panel">
+                <div class="log-header">
+                    <span>Logs</span>
+                    <button id="clearLogsBtn" class="small-btn">Clear</button>
+                </div>
+                <div id="logContent" class="log-content"></div>
+            </div>
+        </div>
     </div>
     
     <script src="app.js"></script>

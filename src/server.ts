@@ -5,6 +5,7 @@ import path from 'path';
 import { db } from './db';
 import { buildTimetable, findRoute } from './routing/csa';
 import { fetchLiveDelays } from './services/realtime';
+import { syncGtfs } from './services/gtfsSync';
 import fs from 'fs';
 
 const app = express();
@@ -12,6 +13,29 @@ app.use(cors());
 app.use(compression());
 app.use(express.json());
 app.use(express.static(path.join(__dirname, '../public')));
+
+// In-memory log buffer for frontend
+const logBuffer: string[] = [];
+const MAX_LOG_LINES = 500;
+
+function logToBuffer(msg: string) {
+    const timestamp = new Date().toISOString().slice(11, 19);
+    logBuffer.push(`[${timestamp}] ${msg}`);
+    if (logBuffer.length > MAX_LOG_LINES) logBuffer.shift();
+    console.log(msg);
+}
+
+// Override console.log to capture sync logs
+const originalLog = console.log;
+const originalError = console.error;
+console.log = (...args: any[]) => {
+    const msg = args.map(a => typeof a === 'object' ? JSON.stringify(a) : String(a)).join(' ');
+    logToBuffer(msg);
+};
+console.error = (...args: any[]) => {
+    const msg = args.map(a => typeof a === 'object' ? JSON.stringify(a) : String(a)).join(' ');
+    logToBuffer(msg);
+};
 
 // Initialize CSA
 setTimeout(() => {
@@ -89,7 +113,67 @@ app.get('/api/route', async (req, res) => {
     }
 });
 
+// Sync endpoint
+let isSyncing = false;
+app.post('/api/sync', async (req, res) => {
+    if (isSyncing) {
+        return res.status(409).json({ error: 'Sync already in progress' });
+    }
+    isSyncing = true;
+    logToBuffer('=== Sync started via API ===');
+    
+    // Run sync in background
+    syncGtfs().then(() => {
+        logToBuffer('=== Sync completed ===');
+        isSyncing = false;
+        // Rebuild timetable after sync
+        buildTimetable();
+    }).catch((err) => {
+        logToBuffer('=== Sync failed: ' + err.message + ' ===');
+        isSyncing = false;
+    });
+    
+    res.json({ status: 'started' });
+});
+
+// Get sync status
+app.get('/api/sync/status', (req, res) => {
+    res.json({ syncing: isSyncing });
+});
+
+// SSE endpoint for live logs
+app.get('/api/logs/stream', (req, res) => {
+    res.setHeader('Content-Type', 'text/event-stream');
+    res.setHeader('Cache-Control', 'no-cache');
+    res.setHeader('Connection', 'keep-alive');
+    
+    // Send current logs
+    const currentLogs = [...logBuffer];
+    res.write(`data: ${JSON.stringify({ type: 'init', logs: currentLogs })}\n\n`);
+    
+    // Send heartbeat every 5 seconds
+    const heartbeat = setInterval(() => {
+        res.write(`data: ${JSON.stringify({ type: 'heartbeat' })}\n\n`);
+    }, 5000);
+    
+    // Send new logs as they come in
+    let lastIndex = logBuffer.length;
+    const checkLogs = setInterval(() => {
+        if (logBuffer.length > lastIndex) {
+            const newLogs = logBuffer.slice(lastIndex);
+            res.write(`data: ${JSON.stringify({ type: 'logs', logs: newLogs })}\n\n`);
+            lastIndex = logBuffer.length;
+        }
+    }, 500);
+    
+    // Cleanup on disconnect
+    req.on('close', () => {
+        clearInterval(heartbeat);
+        clearInterval(checkLogs);
+    });
+});
+
 const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => {
-    console.log(`Server running on port ${PORT}`);
+    logToBuffer(`Server running on port ${PORT}`);
 });

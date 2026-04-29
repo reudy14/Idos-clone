@@ -106,4 +106,63 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     });
 
+    // Sync button and log streaming
+    const syncBtn = document.getElementById('syncBtn');
+    const syncStatus = document.getElementById('syncStatus');
+    const logContent = document.getElementById('logContent');
+    const clearLogsBtn = document.getElementById('clearLogsBtn');
+
+    let eventSource = null;
+
+    function appendLog(line) {
+        logContent.textContent += line + '\n';
+        logContent.scrollTop = logContent.scrollHeight;
+    }
+
+    function connectLogStream() {
+        eventSource = new EventSource('/api/logs/stream');
+        
+        eventSource.onmessage = (e) => {
+            const data = JSON.parse(e.data);
+            if (data.type === 'init') {
+                logContent.textContent = data.logs.join('\n') + '\n';
+                logContent.scrollTop = logContent.scrollHeight;
+            } else if (data.type === 'logs') {
+                data.logs.forEach(appendLog);
+            }
+        };
+
+        eventSource.onerror = () => {
+            eventSource.close();
+            setTimeout(connectLogStream, 3000);
+        };
+    }
+
+    connectLogStream();
+
+    syncBtn.addEventListener('click', async () => {
+        syncBtn.disabled = true;
+        syncStatus.textContent = 'Syncing...';
+        syncStatus.className = 'sync-status syncing';
+        appendLog('Starting sync...');
+
+        try {
+            const res = await fetch('/api/sync', { method: 'POST' });
+            const data = await res.json();
+            if (data.error) {
+                appendLog('Error: ' + data.error);
+            }
+        } catch(e) {
+            appendLog('Error: ' + e.message);
+        }
+
+        syncBtn.disabled = false;
+        syncStatus.textContent = '';
+        syncStatus.className = 'sync-status';
+    });
+
+    clearLogsBtn.addEventListener('click', () => {
+        logContent.textContent = '';
+    });
+
 });
