@@ -3,7 +3,7 @@ import cors from 'cors';
 import compression from 'compression';
 import path from 'path';
 import { db } from './db';
-import { buildTimetable, findRoute } from './routing/csa';
+import { buildTimetable, findRoute, findRoutes } from './routing/csa';
 import { fetchLiveDelays } from './services/realtime';
 import { syncGtfs, setLogCallback } from './services/gtfsSync';
 import fs from 'fs';
@@ -82,6 +82,66 @@ app.get('/api/stops', (req, res) => {
     res.json(filtered);
 });
 
+app.get('/api/routes', async (req, res) => {
+    const { fromId, toId, time } = req.query;
+    if (!fromId || !toId || !time) {
+        return res.status(400).json({ error: 'fromId, toId, and time are required' });
+    }
+
+    try {
+        const routes = findRoutes(fromId as string, toId as string, time as string, 3);
+        
+        if (!routes || routes.length === 0) {
+            return res.json({ error: 'No route found' });
+        }
+
+        // Enrich each route's path with metadata
+        const enrichedRoutes = await Promise.all(routes.map(async (routeData: any) => {
+            // Apply real-time modifications if requested & available
+            // Group by distinct route to fetch realtime info
+            const distinctRoutes = Array.from(new Set(routeData.path.map((p: any) => p.route_id)));
+            
+            // Fetch short names for those routes to resolve to Golemio query
+            let realtimeDelays: Record<string, number> = {};
+            for(const r of distinctRoutes) {
+                const routeRow = db.prepare('SELECT route_short_name FROM routes WHERE route_id = ?').get(r) as any;
+                if (routeRow) {
+                    const liveDelays = await fetchLiveDelays(routeRow.route_short_name);
+                    realtimeDelays = { ...realtimeDelays, ...liveDelays };
+                }
+            }
+
+            // Enrich path with metadata and delays
+            const enrichedPath = routeData.path.map((conn: any) => {
+                const routeInfo = db.prepare('SELECT route_short_name, route_type FROM routes WHERE route_id = ?').get(conn.route_id) as any;
+                const delay = realtimeDelays[conn.trip_id] || 0;
+
+                return {
+                    ...conn,
+                    route_short_name: routeInfo?.route_short_name,
+                    route_type: routeInfo?.route_type,
+                    delay_seconds: delay
+                };
+            });
+
+            return {
+                ...routeData,
+                path: enrichedPath
+            };
+        }));
+
+        res.json({
+            routes: enrichedRoutes,
+            count: enrichedRoutes.length
+        });
+
+    } catch (err: any) {
+        console.error(err);
+        res.status(500).json({ error: err.message });
+    }
+});
+
+// Keep old endpoint for backwards compatibility
 app.get('/api/route', async (req, res) => {
     const { fromId, toId, time } = req.query;
     if (!fromId || !toId || !time) {
@@ -89,17 +149,16 @@ app.get('/api/route', async (req, res) => {
     }
 
     try {
-        const routeData = findRoute(fromId as string, toId as string, time as string);
+        const routes = findRoutes(fromId as string, toId as string, time as string, 1);
+        const routeData = routes.length > 0 ? routes[0] : null;
         
         if (!routeData) {
             return res.json({ error: 'No route found' });
         }
 
         // Apply real-time modifications if requested & available
-        // Group by distinct route to fetch realtime info
-        const distinctRoutes = Array.from(new Set(routeData.path.map(p => p.route_id)));
+        const distinctRoutes = Array.from(new Set(routeData.path.map((p: any) => p.route_id)));
         
-        // Fetch short names for those routes to resolve to Golemio query
         let realtimeDelays: Record<string, number> = {};
         for(const r of distinctRoutes) {
             const routeRow = db.prepare('SELECT route_short_name FROM routes WHERE route_id = ?').get(r) as any;
@@ -109,18 +168,12 @@ app.get('/api/route', async (req, res) => {
             }
         }
 
-        // Enrich path with metadata and delays
-        const enrichedPath = routeData.path.map(conn => {
-            const depStop = db.prepare('SELECT stop_name FROM stops WHERE stop_id = ?').get(conn.departure_stop) as any;
-            const arrStop = db.prepare('SELECT stop_name FROM stops WHERE stop_id = ?').get(conn.arrival_stop) as any;
+        const enrichedPath = routeData.path.map((conn: any) => {
             const routeInfo = db.prepare('SELECT route_short_name, route_type FROM routes WHERE route_id = ?').get(conn.route_id) as any;
-            
             const delay = realtimeDelays[conn.trip_id] || 0;
 
             return {
                 ...conn,
-                departure_stop_name: depStop?.stop_name,
-                arrival_stop_name: arrStop?.stop_name,
                 route_short_name: routeInfo?.route_short_name,
                 route_type: routeInfo?.route_type,
                 delay_seconds: delay

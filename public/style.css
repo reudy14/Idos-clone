@@ -324,3 +324,76 @@ button:hover {
 .route-stop-name {
     flex: 1;
 }
+
+/* Multiple Route Options */
+.routes-container {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+}
+
+.route-option {
+    border: 2px solid #ddd;
+    border-radius: 8px;
+    overflow: hidden;
+    transition: border-color 0.2s;
+}
+
+.route-option.selected {
+    border-color: #ce001d;
+}
+
+.route-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 12px 15px;
+    background: #f8f8f8;
+    cursor: pointer;
+}
+
+.route-header:hover {
+    background: #f0f0f0;
+}
+
+.route-summary {
+    display: flex;
+    align-items: center;
+    gap: 15px;
+    font-weight: bold;
+}
+
+.route-summary .route-duration {
+    color: #333;
+    font-size: 18px;
+}
+
+.route-summary .route-arrival {
+    color: #666;
+}
+
+.route-legs-preview {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    color: #666;
+    font-size: 14px;
+}
+
+.leg-preview-route {
+    background: #444;
+    color: #fff;
+    padding: 2px 8px;
+    border-radius: 4px;
+    font-size: 12px;
+}
+
+.route-details {
+    display: none;
+    padding: 10px;
+    background: #fff;
+}
+
+.route-option.selected .route-details {
+    display: block;
+}

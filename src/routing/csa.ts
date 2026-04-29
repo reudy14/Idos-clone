@@ -99,57 +99,82 @@ export interface RouteProfile {
 }
 
 export function findRoute(startStopId: string, arrivalStopId: string, startTimeStr: string) {
+    const routes = findRoutes(startStopId, arrivalStopId, startTimeStr, 1);
+    return routes.length > 0 ? routes[0] : null;
+}
+
+export function findRoutes(startStopId: string, arrivalStopId: string, startTimeStr: string, maxRoutes = 3) {
     const startTimeAsSeconds = timeToSeconds(startTimeStr);
     
     // Convert stop_ids to stop_names for unified routing
     const startStopName = stopNameCache[startStopId] || startStopId;
     const arrivalStopName = stopNameCache[arrivalStopId] || arrivalStopId;
     
-    const earliestArrival: Record<string, number> = {};
-    const tripReached: Record<string, boolean> = {}; // Tracks if we boarded a trip
-    const inConnection: Record<string, Connection> = {}; // Reconstruct path
+    const results: any[] = [];
+    const usedTrips = new Set<string>();
+    
+    for (let routeNum = 0; routeNum < maxRoutes; routeNum++) {
+        const earliestArrival: Record<string, number> = {};
+        const tripReached: Record<string, boolean> = {}; // Tracks if we boarded a trip
+        const inConnection: Record<string, Connection> = {}; // Reconstruct path
+        const arrivedVia: Record<string, Connection> = {}; // Track which connection arrived at each stop
 
-    earliestArrival[startStopName] = startTimeAsSeconds;
+        earliestArrival[startStopName] = startTimeAsSeconds;
 
-    // Scan connections
-    for (const conn of timetable) {
-        // Only process connections departing on or after start time
-        if (conn.departure_time < startTimeAsSeconds) continue;
-
-        // Can we catch this connection? 
-        // Either we are already at the stop before it leaves, or we transfer to this trip
-        const canCatch = earliestArrival[conn.departure_stop] <= conn.departure_time || tripReached[conn.trip_id];
-
-        if (canCatch) {
-            tripReached[conn.trip_id] = true;
+        // Scan connections
+        for (const conn of timetable) {
+            // Skip trips already used in previous routes
+            if (usedTrips.has(conn.trip_id)) continue;
             
-            // Check if this improves arrival time at the next stop
-            if (!earliestArrival[conn.arrival_stop] || conn.arrival_time < earliestArrival[conn.arrival_stop]) {
-                earliestArrival[conn.arrival_stop] = conn.arrival_time;
-                inConnection[conn.arrival_stop] = conn;
+            // Only process connections departing on or after start time
+            if (conn.departure_time < startTimeAsSeconds) continue;
+
+            // Can we catch this connection? 
+            // Either we are already at the stop before it leaves, or we transfer to this trip
+            const canCatch = earliestArrival[conn.departure_stop] <= conn.departure_time || tripReached[conn.trip_id];
+
+            if (canCatch) {
+                tripReached[conn.trip_id] = true;
+                
+                // Check if this improves arrival time at the next stop
+                if (!earliestArrival[conn.arrival_stop] || conn.arrival_time < earliestArrival[conn.arrival_stop]) {
+                    earliestArrival[conn.arrival_stop] = conn.arrival_time;
+                    inConnection[conn.arrival_stop] = conn;
+                    arrivedVia[conn.arrival_stop] = conn;
+                }
             }
         }
-    }
 
-    // Reconstruct path
-    if (!earliestArrival[arrivalStopName]) {
-        return null; // Route not found
-    }
+        // Reconstruct path
+        if (!earliestArrival[arrivalStopName]) {
+            break; // No more routes found
+        }
 
-    const path: Connection[] = [];
-    let currentStop = arrivalStopName;
-    while (currentStop !== startStopName) {
-        const conn = inConnection[currentStop];
-        if (!conn) break;
-        path.push(conn);
-        currentStop = conn.departure_stop;
-    }
+        const path: Connection[] = [];
+        let currentStop = arrivalStopName;
+        while (currentStop !== startStopName) {
+            const conn = inConnection[currentStop];
+            if (!conn) break;
+            path.push(conn);
+            currentStop = conn.departure_stop;
+        }
 
-    path.reverse();
-    return {
-        path,
-        start_time: startTimeStr,
-        arrival_time: secondsToTime(earliestArrival[arrivalStopName]),
-        duration_minutes: Math.round((earliestArrival[arrivalStopName] - startTimeAsSeconds) / 60)
-    };
+        path.reverse();
+        
+        if (path.length === 0) break;
+        
+        results.push({
+            path,
+            start_time: startTimeStr,
+            arrival_time: secondsToTime(earliestArrival[arrivalStopName]),
+            duration_minutes: Math.round((earliestArrival[arrivalStopName] - startTimeAsSeconds) / 60)
+        });
+        
+        // Mark all trips used in this route to avoid them in next routes
+        for (const conn of path) {
+            usedTrips.add(conn.trip_id);
+        }
+    }
+    
+    return results;
 }
