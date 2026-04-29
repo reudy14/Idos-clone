@@ -38,12 +38,48 @@ setTimeout(() => {
     }
 }, 1000);
 
+// Remove diacritics and replace special chars with spaces for search
+function normalize(str: string): string {
+    return str
+        .normalize('NFD')
+        .replace(/[\u0300-\u036f]/g, '')
+        .replace(/[,()[\]{}.,;:!?\/\\\-_]/g, ' ')
+        .toLowerCase();
+}
+
 app.get('/api/stops', (req, res) => {
     const q = req.query.q as string;
     if (!q || q.length < 2) return res.json([]);
-    const stmt = db.prepare('SELECT stop_id, stop_name, stop_lat, stop_lon FROM stops WHERE stop_name LIKE ? GROUP BY stop_name LIMIT 20');
-    const rows = stmt.all(`%${q}%`);
-    res.json(rows);
+    
+    // Normalize first, then split into words
+    const normalizedQ = normalize(q);
+    const queryWords = normalizedQ.split(/\s+/).filter(w => w.length > 0);
+    
+    // Get all stops and filter in memory
+    const allStops = db.prepare('SELECT stop_id, stop_name, stop_lat, stop_lon FROM stops').all() as any[];
+    
+    const filtered = allStops
+        .filter(s => {
+            // Normalize stop name first, then split into words
+            const normalizedName = normalize(s.stop_name);
+            const nameWords = normalizedName.split(/\s+/).filter(w => w.length > 0);
+            
+            // Check if each query word matches a corresponding name word (in order)
+            let queryIdx = 0;
+            let nameIdx = 0;
+            
+            while (queryIdx < queryWords.length && nameIdx < nameWords.length) {
+                if (nameWords[nameIdx].includes(queryWords[queryIdx])) {
+                    queryIdx++;
+                }
+                nameIdx++;
+            }
+            
+            return queryIdx === queryWords.length;
+        })
+        .slice(0, 20);
+    
+    res.json(filtered);
 });
 
 app.get('/api/route', async (req, res) => {

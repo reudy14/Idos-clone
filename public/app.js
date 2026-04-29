@@ -22,7 +22,16 @@ document.addEventListener('DOMContentLoaded', () => {
                 const res = await fetch(`/api/stops?q=${encodeURIComponent(q)}`);
                 const data = await res.json();
                 sugg.innerHTML = '';
+                
+                // Group by stop_name to show unique names
+                const byName = {};
                 data.forEach(stop => {
+                    if (!byName[stop.stop_name]) {
+                        byName[stop.stop_name] = stop;
+                    }
+                });
+                
+                Object.values(byName).forEach(stop => {
                     const li = document.createElement('li');
                     li.textContent = stop.stop_name;
                     li.onclick = () => {
@@ -118,8 +127,7 @@ document.addEventListener('DOMContentLoaded', () => {
     if (!syncBtn || !logContent) {
         console.error('Admin elements not found!');
     } else {
-        let lastLogIndex = 0;
-        let autoRefresh = true;
+        let autoRefresh = false;
         let pollInterval = null;
 
         function appendLog(line) {
@@ -158,8 +166,6 @@ document.addEventListener('DOMContentLoaded', () => {
                 stopPolling();
             }
         });
-
-        startPolling();
 
         syncBtn.addEventListener('click', async () => {
             syncBtn.disabled = true;
