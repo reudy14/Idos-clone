@@ -83,13 +83,13 @@ app.get('/api/stops', (req, res) => {
 });
 
 app.get('/api/routes', async (req, res) => {
-    const { fromId, toId, time } = req.query;
+    const { fromId, toId, time, day } = req.query;
     if (!fromId || !toId || !time) {
         return res.status(400).json({ error: 'fromId, toId, and time are required' });
     }
 
     try {
-        const routes = findRoutes(fromId as string, toId as string, time as string, 3);
+        const routes = findRoutes(fromId as string, toId as string, time as string, 3, day as string | undefined);
         
         if (!routes || routes.length === 0) {
             return res.json({ error: 'No route found' });

@@ -1,6 +1,11 @@
 document.addEventListener('DOMContentLoaded', () => {
     // Set default time to now
     document.getElementById('timeInput').value = new Date().toTimeString().slice(0,5);
+    
+    // Set default day to today
+    const days = ['sunday', 'monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday'];
+    const today = days[new Date().getDay()];
+    document.getElementById('dayInput').value = today;
 
     let fromStopId = null;
     let toStopId = null;
@@ -138,11 +143,12 @@ document.addEventListener('DOMContentLoaded', () => {
         }
         
         const timeVal = document.getElementById('timeInput').value + ":00";
+        const dayVal = document.getElementById('dayInput').value;
         const resDiv = document.getElementById('results');
         resDiv.innerHTML = '<p>Loading...</p>';
 
         try {
-            const res = await fetch(`/api/routes?fromId=${fromStopId}&toId=${toStopId}&time=${timeVal}`);
+            const res = await fetch(`/api/routes?fromId=${fromStopId}&toId=${toStopId}&time=${timeVal}&day=${dayVal}`);
             const data = await res.json();
 
             if (data.error || !data.routes) {

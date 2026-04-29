@@ -31,8 +31,8 @@ export function secondsToTime(secs: number): string {
     return `${h.toString().padStart(2, '0')}:${m.toString().padStart(2, '0')}:${s.toString().padStart(2, '0')}`;
 }
 
-export function buildTimetable() {
-    console.log('Building in-memory timetable from SQLite for CSA...');
+export function buildTimetable(dayOfWeek?: string) {
+    console.log(`Building in-memory timetable from SQLite for CSA (day: ${dayOfWeek || 'all'})...`);
     
     // Build stop name cache and group stops by name
     const allStops = db.prepare('SELECT stop_id, stop_name FROM stops').all() as any[];
@@ -47,11 +47,25 @@ export function buildTimetable() {
     }
     console.log(`Loaded ${allStops.length} stops, ${Object.keys(stopsByName).length} unique names`);
 
-    // Get all trips that are running today
-    // For simplicity of this demo, we assume all trips are running. 
-    // In a production system, we'd filter by `calendar` based on current day of week and start/end dates.
+    // Filter trips by day of week using calendar table
+    let serviceIds: string[] | null = null;
+    if (dayOfWeek) {
+        const dayColumn = dayOfWeek.toLowerCase();
+        const validDays = ['monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday', 'sunday'];
+        if (validDays.includes(dayColumn)) {
+            const today = new Date().toISOString().slice(0, 10); // YYYY-MM-DD
+            const calendarRows = db.prepare(`
+                SELECT service_id FROM calendar
+                WHERE ${dayColumn} = 1
+                AND start_date <= ?
+                AND end_date >= ?
+            `).all(today, today) as any[];
+            serviceIds = calendarRows.map(r => r.service_id);
+            console.log(`Found ${serviceIds.length} service_ids running on ${dayOfWeek}`);
+        }
+    }
 
-    const rows = db.prepare(`
+    let query = `
         SELECT 
             st.trip_id,
             t.route_id,
@@ -61,8 +75,15 @@ export function buildTimetable() {
             st.departure_time
         FROM stop_times st
         JOIN trips t ON st.trip_id = t.trip_id
-        ORDER BY st.trip_id, st.stop_sequence ASC
-    `).all() as any[];
+    `;
+    if (serviceIds !== null) {
+        query += ` WHERE t.service_id IN (${serviceIds.map(() => '?').join(',')})`;
+    }
+    query += ` ORDER BY st.trip_id, st.stop_sequence ASC`;
+
+    const rows = serviceIds !== null
+        ? db.prepare(query).all(...serviceIds) as any[]
+        : db.prepare(query).all() as any[];
 
     // Convert stop_times into Connections (pairs of adjacent stops)
     // Use STOP NAMES instead of stop_ids to group A/B directions
@@ -98,12 +119,18 @@ export interface RouteProfile {
     connection: Connection | null; // which connection got us here
 }
 
-export function findRoute(startStopId: string, arrivalStopId: string, startTimeStr: string) {
-    const routes = findRoutes(startStopId, arrivalStopId, startTimeStr, 1);
+export function findRoute(startStopId: string, arrivalStopId: string, startTimeStr: string, dayOfWeek?: string) {
+    const routes = findRoutes(startStopId, arrivalStopId, startTimeStr, 1, dayOfWeek);
     return routes.length > 0 ? routes[0] : null;
 }
 
-export function findRoutes(startStopId: string, arrivalStopId: string, startTimeStr: string, maxRoutes = 3) {
+export function findRoutes(startStopId: string, arrivalStopId: string, startTimeStr: string, maxRoutes = 3, dayOfWeek?: string) {
+    // Rebuild timetable for the specified day if needed
+    if (dayOfWeek) {
+        buildTimetable(dayOfWeek);
+    } else {
+        buildTimetable(); // ensure timetable is loaded
+    }
     const startTimeAsSeconds = timeToSeconds(startTimeStr);
     
     // Convert stop_ids to stop_names for unified routing

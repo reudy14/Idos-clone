@@ -33,12 +33,28 @@ h1 {
     position: relative;
 }
 
+.input-row {
+    display: flex;
+    gap: 15px;
+}
+
+.input-row .input-group {
+    flex: 1;
+}
+
+.input-row input,
+.input-row select {
+    height: 42px;
+    box-sizing: border-box;
+}
+
 .input-group label {
     font-weight: bold;
     margin-bottom: 5px;
 }
 
-.input-group input {
+.input-group input,
+.input-group select {
     padding: 10px;
     border: 1px solid #ccc;
     border-radius: 6px;
@@ -60,6 +76,10 @@ h1 {
     z-index: 10;
     max-height: 200px;
     overflow-y: auto;
+}
+
+.suggestions:empty {
+    display: none;
 }
 
 .suggestions li {
