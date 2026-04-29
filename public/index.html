@@ -1,0 +1,35 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>PID Clone</title>
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+    <div class="container">
+        <h1>Prague Transit Router</h1>
+        <div class="search-box">
+            <div class="input-group">
+                <label>From:</label>
+                <input type="text" id="fromInput" placeholder="e.g. Muzeum" autocomplete="off">
+                <ul id="fromSuggestions" class="suggestions"></ul>
+            </div>
+            <div class="input-group">
+                <label>To:</label>
+                <input type="text" id="toInput" placeholder="e.g. Flora" autocomplete="off">
+                <ul id="toSuggestions" class="suggestions"></ul>
+            </div>
+            <div class="input-group">
+                <label>Time:</label>
+                <input type="time" id="timeInput">
+            </div>
+            <button id="searchBtn">Search Route</button>
+        </div>
+
+        <div id="results" class="results-container"></div>
+    </div>
+    
+    <script src="app.js"></script>
+</body>
+</html>

@@ -1,0 +1,132 @@
+body {
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+    background-color: #f0f2f5;
+    margin: 0;
+    padding: 20px;
+    color: #333;
+}
+
+.container {
+    max-width: 600px;
+    margin: 0 auto;
+    background: #fff;
+    padding: 30px;
+    border-radius: 12px;
+    box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+}
+
+h1 {
+    text-align: center;
+    color: #ce001d; /* PID red */
+}
+
+.search-box {
+    display: flex;
+    flex-direction: column;
+    gap: 15px;
+    margin-bottom: 30px;
+}
+
+.input-group {
+    display: flex;
+    flex-direction: column;
+    position: relative;
+}
+
+.input-group label {
+    font-weight: bold;
+    margin-bottom: 5px;
+}
+
+.input-group input {
+    padding: 10px;
+    border: 1px solid #ccc;
+    border-radius: 6px;
+    font-size: 16px;
+}
+
+.suggestions {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+    position: absolute;
+    top: 100%;
+    left: 0;
+    right: 0;
+    background: white;
+    border: 1px solid #ccc;
+    border-top: none;
+    border-radius: 0 0 6px 6px;
+    z-index: 10;
+    max-height: 200px;
+    overflow-y: auto;
+}
+
+.suggestions li {
+    padding: 10px;
+    cursor: pointer;
+}
+
+.suggestions li:hover {
+    background: #f0f2f5;
+}
+
+button {
+    padding: 12px;
+    background-color: #ce001d;
+    color: white;
+    border: none;
+    border-radius: 6px;
+    font-size: 16px;
+    font-weight: bold;
+    cursor: pointer;
+    transition: background 0.3s;
+}
+
+button:hover {
+    background-color: #a80017;
+}
+
+.results-container {
+    margin-top: 20px;
+}
+
+.route-meta {
+    font-size: 18px;
+    font-weight: bold;
+    margin-bottom: 20px;
+    padding-bottom: 10px;
+    border-bottom: 2px solid #eee;
+}
+
+.route-step {
+    display: flex;
+    padding: 10px 0;
+    border-bottom: 1px solid #eee;
+}
+
+.route-time {
+    width: 60px;
+    font-weight: bold;
+}
+
+.route-details {
+    flex: 1;
+}
+
+.route-number {
+    display: inline-block;
+    background: #444;
+    color: #fff;
+    padding: 2px 6px;
+    border-radius: 4px;
+    font-size: 12px;
+    margin: 0 5px;
+}
+
+.delay-badge {
+    color: #ce001d;
+    font-weight: bold;
+    font-size: 14px;
+    margin-left: 10px;
+}

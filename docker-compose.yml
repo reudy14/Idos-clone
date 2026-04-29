@@ -1,0 +1,14 @@
+version: "3.8"
+
+services:
+  app:
+    build: .
+    ports:
+      - "3000:3000"
+    volumes:
+      - ./data:/app/data
+      - ./src:/app/src
+    environment:
+      - PORT=3000
+      - GOLEMIO_API_TOKEN=${GOLEMIO_API_TOKEN}
+    command: npm run dev
