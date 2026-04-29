@@ -82,31 +82,72 @@ document.addEventListener('DOMContentLoaded', () => {
 
             let html = `<div class="route-meta">Duration: ${data.duration_minutes} min | Arrival: ${data.arrival_time}</div>`;
             
+            // Group consecutive connections by route
+            const legs = [];
+            let currentLeg = null;
+            
             data.path.forEach((conn, index) => {
-                const delayText = conn.delay_seconds > 0 
-                    ? `<span class="delay-badge">+${Math.round(conn.delay_seconds / 60)} min</span>` 
-                    : '';
-
-                html += `
-                <div class="route-step">
-                    <div class="route-time">${formatTime(conn.departure_time)}</div>
-                    <div class="route-details">
-                        <strong>${conn.departure_stop_name}</strong>
-                        <div><span class="route-number">${conn.route_short_name || 'Walk'}</span> ⬇</div>
-                    </div>
-                    ${delayText}
-                </div>`;
-                
-                // Print explicit arrival for the very last stop
-                if (index === data.path.length - 1) {
-                    html += `
-                    <div class="route-step">
-                        <div class="route-time">${formatTime(conn.arrival_time)}</div>
-                        <div class="route-details">
-                            <strong>${conn.arrival_stop_name}</strong>
-                        </div>
-                    </div>`;
+                if (!currentLeg || currentLeg.route_id !== conn.route_id) {
+                    if (currentLeg) {
+                        // Add arrival stop to previous leg before starting new one
+                        currentLeg.stops.push({
+                            name: conn.departure_stop,
+                            time: conn.departure_time
+                        });
+                        legs.push(currentLeg);
+                    }
+                    currentLeg = {
+                        route_id: conn.route_id,
+                        route_short_name: conn.route_short_name,
+                        stops: [{
+                            name: conn.departure_stop,
+                            time: conn.departure_time
+                        }],
+                        departure_time: conn.departure_time,
+                        arrival_time: conn.arrival_time
+                    };
+                } else {
+                    currentLeg.stops.push({
+                        name: conn.departure_stop,
+                        time: conn.departure_time
+                    });
+                    currentLeg.arrival_time = conn.arrival_time;
                 }
+            });
+            if (currentLeg) {
+                // Add final arrival stop
+                const lastConn = data.path[data.path.length - 1];
+                currentLeg.stops.push({
+                    name: lastConn.arrival_stop,
+                    time: lastConn.arrival_time
+                });
+                legs.push(currentLeg);
+            }
+            
+            // Render collapsible legs
+            legs.forEach((leg, legIndex) => {
+                const isExpanded = legIndex === 0; // First leg expanded by default
+                html += `
+                <details class="route-leg" ${isExpanded ? 'open' : ''}>
+                    <summary class="route-leg-summary">
+                        <div class="route-leg-main">
+                            <span class="route-number">${leg.route_short_name || 'Walk'}</span>
+                            <span class="route-leg-route">${leg.stops[0].name} → ${leg.stops[leg.stops.length-1].name}</span>
+                        </div>
+                        <div class="route-leg-times">
+                            <span class="route-time">${formatTime(leg.departure_time)}</span>
+                            <span class="route-duration">${Math.round((leg.arrival_time - leg.departure_time)/60)} min</span>
+                        </div>
+                    </summary>
+                    <div class="route-leg-stops">
+                        ${leg.stops.map((s, i) => `
+                            <div class="route-stop ${i === 0 ? 'departure' : i === leg.stops.length-1 ? 'arrival' : 'intermediate'}">
+                                <span class="route-stop-time">${formatTime(s.time)}</span>
+                                <span class="route-stop-name">${s.name}</span>
+                            </div>
+                        `).join('')}
+                    </div>
+                </details>`;
             });
 
             resDiv.innerHTML = html;

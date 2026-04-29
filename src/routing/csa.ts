@@ -12,6 +12,10 @@ export interface Connection {
 // In-memory timetable: sorted array of all connections
 export let timetable: Connection[] = [];
 
+// Stop name cache for grouping stops by name
+let stopNameCache: Record<string, string> = {}; // stop_id -> stop_name
+let stopsByName: Record<string, string[]> = {}; // stop_name -> stop_ids
+
 // Helper to convert "HH:MM:SS" to seconds from midnight
 export function timeToSeconds(timeStr: string): number {
     const parts = timeStr.split(':').map(Number);
@@ -29,6 +33,20 @@ export function secondsToTime(secs: number): string {
 
 export function buildTimetable() {
     console.log('Building in-memory timetable from SQLite for CSA...');
+    
+    // Build stop name cache and group stops by name
+    const allStops = db.prepare('SELECT stop_id, stop_name FROM stops').all() as any[];
+    stopNameCache = {};
+    stopsByName = {};
+    for (const s of allStops) {
+        stopNameCache[s.stop_id] = s.stop_name;
+        if (!stopsByName[s.stop_name]) {
+            stopsByName[s.stop_name] = [];
+        }
+        stopsByName[s.stop_name].push(s.stop_id);
+    }
+    console.log(`Loaded ${allStops.length} stops, ${Object.keys(stopsByName).length} unique names`);
+
     // Get all trips that are running today
     // For simplicity of this demo, we assume all trips are running. 
     // In a production system, we'd filter by `calendar` based on current day of week and start/end dates.
@@ -47,15 +65,18 @@ export function buildTimetable() {
     `).all() as any[];
 
     // Convert stop_times into Connections (pairs of adjacent stops)
+    // Use STOP NAMES instead of stop_ids to group A/B directions
     const connections: Connection[] = [];
     
     // Using a map to parse sequences quickly
     let previousRow: any = null;
     for (const row of rows) {
         if (previousRow && previousRow.trip_id === row.trip_id) {
+            const depName = stopNameCache[previousRow.stop_id] || previousRow.stop_id;
+            const arrName = stopNameCache[row.stop_id] || row.stop_id;
             connections.push({
-                departure_stop: previousRow.stop_id,
-                arrival_stop: row.stop_id,
+                departure_stop: depName,  // Use name instead of id
+                arrival_stop: arrName,   // Use name instead of id
                 departure_time: timeToSeconds(previousRow.departure_time),
                 arrival_time: timeToSeconds(row.arrival_time),
                 trip_id: row.trip_id,
@@ -80,11 +101,15 @@ export interface RouteProfile {
 export function findRoute(startStopId: string, arrivalStopId: string, startTimeStr: string) {
     const startTimeAsSeconds = timeToSeconds(startTimeStr);
     
+    // Convert stop_ids to stop_names for unified routing
+    const startStopName = stopNameCache[startStopId] || startStopId;
+    const arrivalStopName = stopNameCache[arrivalStopId] || arrivalStopId;
+    
     const earliestArrival: Record<string, number> = {};
     const tripReached: Record<string, boolean> = {}; // Tracks if we boarded a trip
     const inConnection: Record<string, Connection> = {}; // Reconstruct path
 
-    earliestArrival[startStopId] = startTimeAsSeconds;
+    earliestArrival[startStopName] = startTimeAsSeconds;
 
     // Scan connections
     for (const conn of timetable) {
@@ -107,13 +132,13 @@ export function findRoute(startStopId: string, arrivalStopId: string, startTimeS
     }
 
     // Reconstruct path
-    if (!earliestArrival[arrivalStopId]) {
+    if (!earliestArrival[arrivalStopName]) {
         return null; // Route not found
     }
 
     const path: Connection[] = [];
-    let currentStop = arrivalStopId;
-    while (currentStop !== startStopId) {
+    let currentStop = arrivalStopName;
+    while (currentStop !== startStopName) {
         const conn = inConnection[currentStop];
         if (!conn) break;
         path.push(conn);
@@ -124,7 +149,7 @@ export function findRoute(startStopId: string, arrivalStopId: string, startTimeS
     return {
         path,
         start_time: startTimeStr,
-        arrival_time: secondsToTime(earliestArrival[arrivalStopId]),
-        duration_minutes: Math.round((earliestArrival[arrivalStopId] - startTimeAsSeconds) / 60)
+        arrival_time: secondsToTime(earliestArrival[arrivalStopName]),
+        duration_minutes: Math.round((earliestArrival[arrivalStopName] - startTimeAsSeconds) / 60)
     };
 }

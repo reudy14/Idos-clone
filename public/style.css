@@ -234,3 +234,93 @@ button:hover {
     font-size: 14px;
     margin-left: 10px;
 }
+
+/* Collapsible Route Legs */
+.route-leg {
+    margin-bottom: 10px;
+    border: 1px solid #ddd;
+    border-radius: 8px;
+    overflow: hidden;
+}
+
+.route-leg-summary {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 12px 15px;
+    background: #f8f8f8;
+    cursor: pointer;
+    list-style: none;
+}
+
+.route-leg-summary::-webkit-details-marker {
+    display: none;
+}
+
+.route-leg-summary::before {
+    content: '▶';
+    margin-right: 10px;
+    font-size: 10px;
+    transition: transform 0.2s;
+}
+
+.route-leg[open] .route-leg-summary::before {
+    transform: rotate(90deg);
+}
+
+.route-leg-main {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    flex: 1;
+}
+
+.route-leg-route {
+    font-weight: 500;
+}
+
+.route-leg-times {
+    display: flex;
+    align-items: center;
+    gap: 15px;
+    color: #666;
+    font-size: 14px;
+}
+
+.route-duration {
+    color: #999;
+}
+
+.route-leg-stops {
+    padding: 10px 15px;
+    background: #fff;
+}
+
+.route-stop {
+    display: flex;
+    padding: 6px 0;
+    border-bottom: 1px solid #f0f0f0;
+}
+
+.route-stop.departure {
+    color: #2a9000;
+}
+
+.route-stop.arrival {
+    color: #ce001d;
+    font-weight: 500;
+}
+
+.route-stop.intermediate {
+    color: #666;
+}
+
+.route-stop-time {
+    width: 60px;
+    font-weight: bold;
+    font-size: 14px;
+}
+
+.route-stop-name {
+    flex: 1;
+}
