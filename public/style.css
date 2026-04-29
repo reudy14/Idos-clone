@@ -150,6 +150,25 @@ button:hover {
     font-size: 14px;
 }
 
+.log-controls {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+}
+
+.toggle-label {
+    display: flex;
+    align-items: center;
+    gap: 5px;
+    cursor: pointer;
+    color: #ccc;
+    font-size: 12px;
+}
+
+.toggle-label input {
+    cursor: pointer;
+}
+
 .small-btn {
     padding: 4px 10px;
     font-size: 12px;

@@ -12,6 +12,21 @@ const PAGE_LIMIT = 10000;
 const TEMP_DIR = path.join(process.cwd(), 'data', 'temp_gtfs');
 const HEADERS = TOKEN ? { 'x-access-token': TOKEN } : {};
 
+// Global logger callback (set by server.ts)
+let logCallback: ((msg: string) => void) | null = null;
+
+export function setLogCallback(cb: ((msg: string) => void) | null) {
+    logCallback = cb;
+}
+
+function log(msg: string) {
+    if (logCallback) {
+        logCallback(msg);
+    } else {
+        process.stdout.write(msg + '\n');
+    }
+}
+
 async function fetchAllPages(endpoint: string): Promise<any[]> {
     const rows: any[] = [];
     let offset = 0;
@@ -22,13 +37,13 @@ async function fetchAllPages(endpoint: string): Promise<any[]> {
         rows.push(...items);
         if (items.length < PAGE_LIMIT) break;
         offset += PAGE_LIMIT;
-        console.log(`  fetched ${rows.length} so far...`);
+        log(`  fetched ${rows.length} so far...`);
     }
     return rows;
 }
 
 export async function syncGtfs() {
-    console.log('Starting GTFS Static data sync via Golemio API...');
+    log('Starting GTFS Static data sync via Golemio API...');
     try {
         if (!fs.existsSync(TEMP_DIR)) fs.mkdirSync(TEMP_DIR, { recursive: true });
 
@@ -42,9 +57,9 @@ export async function syncGtfs() {
         db.prepare('DELETE FROM stops').run();
 
         // 1. Stops
-        console.log('Fetching stops...');
+        log('Fetching stops...');
         const stops = await fetchAllPages('/stops');
-        console.log(`Got ${stops.length} stops, inserting...`);
+        log(`Got ${stops.length} stops, inserting...`);
         const insertStop = db.prepare('INSERT OR IGNORE INTO stops (stop_id, stop_name, stop_lat, stop_lon, location_type, parent_station) VALUES (?, ?, ?, ?, ?, ?)');
         for (const f of stops) {
             const s = f.properties;
@@ -53,18 +68,18 @@ export async function syncGtfs() {
         }
 
         // 2. Routes
-        console.log('Fetching routes...');
+        log('Fetching routes...');
         const routes = await fetchAllPages('/routes');
-        console.log(`Got ${routes.length} routes, inserting...`);
+        log(`Got ${routes.length} routes, inserting...`);
         const insertRoute = db.prepare('INSERT OR IGNORE INTO routes (route_id, route_short_name, route_long_name, route_type) VALUES (?, ?, ?, ?)');
         for (const r of routes) {
             insertRoute.run(r.route_id, r.route_short_name ?? '', r.route_long_name ?? '', r.route_type ?? 0);
         }
 
         // 3. Trips
-        console.log('Fetching trips...');
+        log('Fetching trips...');
         const trips = await fetchAllPages('/trips');
-        console.log(`Got ${trips.length} trips, inserting...`);
+        log(`Got ${trips.length} trips, inserting...`);
         const insertTrip = db.prepare('INSERT OR IGNORE INTO trips (trip_id, route_id, service_id, trip_headsign, direction_id) VALUES (?, ?, ?, ?, ?)');
         for (const t of trips) {
             insertTrip.run(t.trip_id, t.route_id, t.service_id ?? '', t.trip_headsign ?? '', t.direction_id ?? 0);
@@ -73,7 +88,7 @@ export async function syncGtfs() {
         // 4. Stop Times — fetch per-stop using /stoptimes/{id}
         // Rate limit: 20 requests per 8 seconds = max 2.5 req/sec
         // Only fetch for stops that have trips (stops referenced by trip data)
-        console.log('Fetching stop_times for stops with trips...');
+        log('Fetching stop_times for stops with trips...');
         const insertSt = db.prepare('INSERT OR IGNORE INTO stop_times (trip_id, arrival_time, departure_time, stop_id, stop_sequence, pickup_type, drop_off_type) VALUES (?, ?, ?, ?, ?, ?, ?)');
 
         // Get stop_ids that are referenced in the trips data (stops that have transit service)
@@ -95,10 +110,10 @@ export async function syncGtfs() {
             WHERE s.stop_id LIKE 'U%' OR s.stop_id LIKE 'M%' OR s.location_type = 1
         `).all() as {stop_id: string}[];
         
-        console.log(`  Found ${stopsWithService.length} stops with transit service (U/M prefix or parent stations)`);
+        log(`  Found ${stopsWithService.length} stops with transit service (U/M prefix or parent stations)`);
 
         if (stopsWithService.length === 0) {
-            console.log('  No active stops found, skipping stop_times sync');
+            log('  No active stops found, skipping stop_times sync');
         } else {
             let successCount = 0;
             let emptyCount = 0;
@@ -119,17 +134,17 @@ export async function syncGtfs() {
                     }
                 } catch (err: any) {
                     errorCount++;
-                    if (errorCount <= 10) console.log(`  ERROR for stop ${stopId}: ${err.response?.status || err.message}`);
+                    if (errorCount <= 10) log(`  ERROR for stop ${stopId}: ${err.response?.status || err.message}`);
                 }
-                if (i % 50 === 0) console.log(`  stop_times progress: ${i}/${stopsWithService.length} (success:${successCount} empty:${emptyCount} errors:${errorCount})`);
+                if (i % 50 === 0) log(`  stop_times progress: ${i}/${stopsWithService.length} (success:${successCount} empty:${emptyCount} errors:${errorCount})`);
                 await new Promise(r => setTimeout(r, 400));
             }
-            console.log(`  stop_times done: success=${successCount} empty=${emptyCount} errors=${errorCount}`);
+            log(`  stop_times done: success=${successCount} empty=${emptyCount} errors=${errorCount}`);
         }
 
         db.exec('COMMIT');
         db.pragma('foreign_keys = ON');
-        console.log('GTFS sync completed!');
+        log('GTFS sync completed!');
     } catch (err) {
         if (db.inTransaction) db.exec('ROLLBACK');
         console.error('Failed to sync GTFS:', err);

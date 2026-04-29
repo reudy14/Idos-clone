@@ -111,58 +111,80 @@ document.addEventListener('DOMContentLoaded', () => {
     const syncStatus = document.getElementById('syncStatus');
     const logContent = document.getElementById('logContent');
     const clearLogsBtn = document.getElementById('clearLogsBtn');
+    const autoRefreshBtn = document.getElementById('autoRefreshBtn');
 
-    let eventSource = null;
+    console.log('Admin elements:', { syncBtn, syncStatus, logContent, clearLogsBtn, autoRefreshBtn });
 
-    function appendLog(line) {
-        logContent.textContent += line + '\n';
-        logContent.scrollTop = logContent.scrollHeight;
-    }
+    if (!syncBtn || !logContent) {
+        console.error('Admin elements not found!');
+    } else {
+        let lastLogIndex = 0;
+        let autoRefresh = true;
+        let pollInterval = null;
 
-    function connectLogStream() {
-        eventSource = new EventSource('/api/logs/stream');
-        
-        eventSource.onmessage = (e) => {
-            const data = JSON.parse(e.data);
-            if (data.type === 'init') {
-                logContent.textContent = data.logs.join('\n') + '\n';
-                logContent.scrollTop = logContent.scrollHeight;
-            } else if (data.type === 'logs') {
-                data.logs.forEach(appendLog);
-            }
-        };
-
-        eventSource.onerror = () => {
-            eventSource.close();
-            setTimeout(connectLogStream, 3000);
-        };
-    }
-
-    connectLogStream();
-
-    syncBtn.addEventListener('click', async () => {
-        syncBtn.disabled = true;
-        syncStatus.textContent = 'Syncing...';
-        syncStatus.className = 'sync-status syncing';
-        appendLog('Starting sync...');
-
-        try {
-            const res = await fetch('/api/sync', { method: 'POST' });
-            const data = await res.json();
-            if (data.error) {
-                appendLog('Error: ' + data.error);
-            }
-        } catch(e) {
-            appendLog('Error: ' + e.message);
+        function appendLog(line) {
+            logContent.textContent += line + '\n';
+            logContent.scrollTop = logContent.scrollHeight;
         }
 
-        syncBtn.disabled = false;
-        syncStatus.textContent = '';
-        syncStatus.className = 'sync-status';
-    });
+        function pollLogs() {
+            if (!autoRefresh) return;
+            fetch('/api/logs')
+                .then(res => res.json())
+                .then(data => {
+                    if (data.logs && data.logs.length > 0) {
+                        data.logs.forEach(appendLog);
+                    }
+                })
+                .catch(err => console.error('Log poll error:', err));
+        }
 
-    clearLogsBtn.addEventListener('click', () => {
-        logContent.textContent = '';
-    });
+        function startPolling() {
+            pollInterval = setInterval(pollLogs, 1000);
+        }
+
+        function stopPolling() {
+            if (pollInterval) {
+                clearInterval(pollInterval);
+                pollInterval = null;
+            }
+        }
+
+        autoRefreshBtn.addEventListener('change', (e) => {
+            autoRefresh = e.target.checked;
+            if (autoRefresh) {
+                startPolling();
+            } else {
+                stopPolling();
+            }
+        });
+
+        startPolling();
+
+        syncBtn.addEventListener('click', async () => {
+            syncBtn.disabled = true;
+            syncStatus.textContent = 'Syncing...';
+            syncStatus.className = 'sync-status syncing';
+            appendLog('Starting sync...');
+
+            try {
+                const res = await fetch('/api/sync', { method: 'POST' });
+                const data = await res.json();
+                if (data.error) {
+                    appendLog('Error: ' + data.error);
+                }
+            } catch(e) {
+                appendLog('Error: ' + e.message);
+            }
+
+            syncBtn.disabled = false;
+            syncStatus.textContent = '';
+            syncStatus.className = 'sync-status';
+        });
+
+        clearLogsBtn.addEventListener('click', () => {
+            logContent.textContent = '';
+        });
+    }
 
 });

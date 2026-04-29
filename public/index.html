@@ -38,7 +38,13 @@
             <div id="logPanel" class="log-panel">
                 <div class="log-header">
                     <span>Logs</span>
-                    <button id="clearLogsBtn" class="small-btn">Clear</button>
+                    <div class="log-controls">
+                        <button id="clearLogsBtn" class="small-btn">Clear</button>
+                        <label class="toggle-label">
+                            <input type="checkbox" id="autoRefreshBtn" checked>
+                            Auto-refresh
+                        </label>
+                    </div>
                 </div>
                 <div id="logContent" class="log-content"></div>
             </div>

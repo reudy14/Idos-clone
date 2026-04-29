@@ -5,7 +5,7 @@ import path from 'path';
 import { db } from './db';
 import { buildTimetable, findRoute } from './routing/csa';
 import { fetchLiveDelays } from './services/realtime';
-import { syncGtfs } from './services/gtfsSync';
+import { syncGtfs, setLogCallback } from './services/gtfsSync';
 import fs from 'fs';
 
 const app = express();
@@ -111,15 +111,20 @@ app.post('/api/sync', async (req, res) => {
     isSyncing = true;
     logToBuffer('=== Sync started via API ===');
     
+    // Set up log callback for syncGtfs
+    setLogCallback(logToBuffer);
+    
     // Run sync in background
     syncGtfs().then(() => {
         logToBuffer('=== Sync completed ===');
         isSyncing = false;
+        setLogCallback(null);
         // Rebuild timetable after sync
         buildTimetable();
     }).catch((err) => {
         logToBuffer('=== Sync failed: ' + err.message + ' ===');
         isSyncing = false;
+        setLogCallback(null);
     });
     
     res.json({ status: 'started' });
@@ -135,8 +140,10 @@ app.get('/api/logs/stream', (req, res) => {
     res.setHeader('Content-Type', 'text/event-stream');
     res.setHeader('Cache-Control', 'no-cache');
     res.setHeader('Connection', 'keep-alive');
+    res.setHeader('Access-Control-Allow-Origin', '*');
+    res.setHeader('X-Accel-Buffering', 'no');
     
-    // Send current logs
+    // Send current logs immediately
     const currentLogs = [...logBuffer];
     res.write(`data: ${JSON.stringify({ type: 'init', logs: currentLogs })}\n\n`);
     
@@ -148,10 +155,12 @@ app.get('/api/logs/stream', (req, res) => {
     // Send new logs as they come in
     let lastIndex = logBuffer.length;
     const checkLogs = setInterval(() => {
-        if (logBuffer.length > lastIndex) {
-            const newLogs = logBuffer.slice(lastIndex);
-            res.write(`data: ${JSON.stringify({ type: 'logs', logs: newLogs })}\n\n`);
-            lastIndex = logBuffer.length;
+        if (res.writable) {
+            if (logBuffer.length > lastIndex) {
+                const newLogs = logBuffer.slice(lastIndex);
+                res.write(`data: ${JSON.stringify({ type: 'logs', logs: newLogs })}\n\n`);
+                lastIndex = logBuffer.length;
+            }
         }
     }, 500);
     
@@ -160,6 +169,14 @@ app.get('/api/logs/stream', (req, res) => {
         clearInterval(heartbeat);
         clearInterval(checkLogs);
     });
+});
+
+// Polling endpoint as backup
+let logIndex = 0;
+app.get('/api/logs', (req, res) => {
+    const logs = logBuffer.slice(logIndex);
+    logIndex = logBuffer.length;
+    res.json({ logs });
 });
 
 const PORT = process.env.PORT || 3000;
