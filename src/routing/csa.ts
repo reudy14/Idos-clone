@@ -12,6 +12,17 @@ export interface Connection {
 // In-memory timetable: sorted array of all connections
 export let timetable: Connection[] = [];
 
+// Cached timetables per day of week
+const timetablesByDay: Record<string, Connection[]> = {
+    monday: [],
+    tuesday: [],
+    wednesday: [],
+    thursday: [],
+    friday: [],
+    saturday: [],
+    sunday: [],
+};
+
 // Stop name cache for grouping stops by name
 let stopNameCache: Record<string, string> = {}; // stop_id -> stop_name
 let stopsByName: Record<string, string[]> = {}; // stop_name -> stop_ids
@@ -53,7 +64,8 @@ export function buildTimetable(dayOfWeek?: string) {
         const dayColumn = dayOfWeek.toLowerCase();
         const validDays = ['monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday', 'sunday'];
         if (validDays.includes(dayColumn)) {
-            const today = new Date().toISOString().slice(0, 10); // YYYY-MM-DD
+            // GTFS uses YYYYMMDD format
+            const today = new Date().toISOString().slice(0, 10).replace(/-/g, '');
             const calendarRows = db.prepare(`
                 SELECT service_id FROM calendar
                 WHERE ${dayColumn} = 1
@@ -110,8 +122,25 @@ export function buildTimetable(dayOfWeek?: string) {
     // Crux of CSA: SORT BY DEPARTURE TIME
     connections.sort((a, b) => a.departure_time - b.departure_time);
     
-    timetable = connections;
-    console.log(`Timetable built with ${timetable.length} connections.`);
+    if (dayOfWeek && timetablesByDay[dayOfWeek] !== undefined) {
+        timetablesByDay[dayOfWeek] = connections;
+        console.log(`Timetable for ${dayOfWeek} cached with ${connections.length} connections.`);
+    } else {
+        timetable = connections;
+        console.log(`Timetable built with ${timetable.length} connections.`);
+    }
+}
+
+export function buildAllTimetables() {
+    console.log('Building all timetables at startup...');
+    const days = ['monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday', 'sunday'];
+    for (const day of days) {
+        buildTimetable(day);
+    }
+    // Set default timetable to today
+    const today = new Date().toLocaleDateString('en-US', { weekday: 'long' }).toLowerCase();
+    timetable = timetablesByDay[today] || timetable;
+    console.log(`Default timetable set to ${today}`);
 }
 
 export interface RouteProfile {
@@ -125,12 +154,15 @@ export function findRoute(startStopId: string, arrivalStopId: string, startTimeS
 }
 
 export function findRoutes(startStopId: string, arrivalStopId: string, startTimeStr: string, maxRoutes = 3, dayOfWeek?: string) {
-    // Rebuild timetable for the specified day if needed
-    if (dayOfWeek) {
-        buildTimetable(dayOfWeek);
-    } else {
-        buildTimetable(); // ensure timetable is loaded
+    // Use cached timetable for the day, or default
+    const activeTimetable = (dayOfWeek && timetablesByDay[dayOfWeek]?.length > 0)
+        ? timetablesByDay[dayOfWeek]
+        : timetable;
+    
+    if (activeTimetable.length === 0) {
+        console.warn('Timetable is empty. Did you call buildAllTimetables()?');
     }
+    
     const startTimeAsSeconds = timeToSeconds(startTimeStr);
     
     // Convert stop_ids to stop_names for unified routing
@@ -149,7 +181,7 @@ export function findRoutes(startStopId: string, arrivalStopId: string, startTime
         earliestArrival[startStopName] = startTimeAsSeconds;
 
         // Scan connections
-        for (const conn of timetable) {
+        for (const conn of activeTimetable) {
             // Skip trips already used in previous routes
             if (usedTrips.has(conn.trip_id)) continue;
             

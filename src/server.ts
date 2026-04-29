@@ -3,7 +3,7 @@ import cors from 'cors';
 import compression from 'compression';
 import path from 'path';
 import { db } from './db';
-import { buildTimetable, findRoute, findRoutes } from './routing/csa';
+import { buildTimetable, buildAllTimetables, findRoute, findRoutes } from './routing/csa';
 import { fetchLiveDelays } from './services/realtime';
 import { syncGtfs, setLogCallback } from './services/gtfsSync';
 import fs from 'fs';
@@ -32,7 +32,7 @@ setTimeout(() => {
     // In production we should wait for GTFS sync to finish if DB is empty
     const stopsCount = db.prepare('SELECT count(*) as c FROM stops').get() as { c: number };
     if (stopsCount.c > 0) {
-        buildTimetable();
+        buildAllTimetables();
     } else {
         console.warn("DB is empty. Please run sync: npm run sync");
     }
